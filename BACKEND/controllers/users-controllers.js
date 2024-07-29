@@ -2,6 +2,8 @@ const { v4: uuidv4 } = require('uuid');
 const HttpError = require('../models/http-error');
 const { validationResult} = require('express-validator');
 const User = require('../models/user');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 
 
@@ -24,17 +26,13 @@ const getUsers = async (req, res, next) => {
 const signup = async (req, res, next) => {  
     const errors =  validationResult(req);
     if(!errors.isEmpty()){
+        
          return next (new HttpError('Invalid inputs passed, please check your data', 422));
     }
 
     const { name, email, password } =req.body;
 
-    // const hadUser = DUMMY_USERS.find(u=> u.email === email);
 
-    // if(hadUser){
-    //     throw new HttpError('Could not create user, email already exist', 401);
-   
-    // }
     let existingUser;
     try{
         existingUser = await User.findOne({ email: email })
@@ -44,6 +42,17 @@ const signup = async (req, res, next) => {
             500
         );
         return next(error);
+    }
+
+    let hashedPassword;
+    try{
+        hashedPassword = await bcrypt.hash(password, 12);
+    }catch(err){
+        const error = new HttpError(
+            'Could not create user, please try again.',
+            500
+        );
+        return next (error);
     }
 
   if(existingUser){
@@ -63,8 +72,8 @@ const signup = async (req, res, next) => {
     const createdUser = new User({
         name, 
         email,
-        password,
-        image: 'https://live.staticflickr.com/7631/26849088292_36fc52ee90_b.jpg',
+        password: hashedPassword,
+        image:  req.file.path,
         places: []
 
     });
@@ -78,12 +87,27 @@ const signup = async (req, res, next) => {
         return next(error);
        }
 
-
+       let token;
+        try{token = jwt.sign(
+            {userId: createdUser.id, email: createdUser.email},
+            'supersecret_dont_share',
+            { expiresIn: '1h' }
+            );
+        }catch(err){
+            const error = new HttpError(
+                'Signing up failed, please try again.',
+                500
+            );
+            return next(error);
+        } 
     
 
-    // DUMMY_USERS.push(createdUser);
 
-    res.status(201).json({user: createdUser.toObject({ getters: true })});
+    res.status(201).json({
+        userId: createdUser.id, 
+        email: createdUser.email, 
+        token: token
+    });
 
 };
 
@@ -106,16 +130,59 @@ const login = async (req, res, next) => {
         );
         return next(error);
     }
-    if(!existingUser || existingUser.password !== password){
+
+
+
+
+    if(!existingUser){
         const error = new HttpError(
             'Invalid credentials, could not log you in.',
-            401
+            403
         );
         return next(error);
     }
 
 
-    res.json({message: 'Logged in.'});
+
+    let isValidPassword;
+    try{
+        isValidPassword = await bcrypt.compare(password, existingUser.password);
+    }catch(err){
+        const error = new HttpError(
+            'Could not log you in, please check your credentials and try again.',
+            500
+        );
+        return next (error);
+    }
+
+    if(!isValidPassword){
+        const error = new HttpError(
+            'Invalid credentials, could not log you in.',
+            403
+        );
+        return next(error);
+    }
+
+    let token;
+        try{token = jwt.sign(
+            {userId: existingUser.id, email: existingUser.email},
+            'supersecret_dont_share',
+            { expiresIn: '1h' }
+            );
+        }catch(err){
+            const error = new HttpError(
+                'Logging in failed, please try again.',
+                500
+            );
+            return next(error);
+        } 
+
+
+    res.json({
+        userId: existingUser.id, 
+        email: existingUser.email, 
+        token: token
+        });
 
 
 

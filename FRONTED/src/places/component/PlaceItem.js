@@ -6,11 +6,14 @@ import Cardd from "../../shared/components/UIElements/Cardd";
 import Button from "../../shared/components/FormElements/Button";
 import Modal from "../../shared/components/UIElements/Modal";
 import { AuthContext } from "../../shared/context/auth-context";
+import { useHttpClient } from "../../shared/hooks/http-hook";
+import ErrorModal from "../../shared/components/UIElements/ErrorModal";
+import LoadingSpinner from "../../shared/components/UIElements/LoadingSpinner";
 // import Map from "../../shared/components/UIElements/Map";
 const PlaceItem= props => {
 
     const auth = useContext(AuthContext);
-
+    const { isLoading, error, sendRequest, clearError } = useHttpClient();
     const [showMap, setShowMap] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const openMapHandler = () => setShowMap(true);
@@ -24,13 +27,27 @@ const PlaceItem= props => {
         setShowConfirmModal(false);
 
     }
-    const confirmDeleteHandler = () =>{
+    const confirmDeleteHandler = async () =>{
         setShowConfirmModal(false);
         console.log('DELETING...')
+        try{
+            await sendRequest(`http://localhost:5000/api/places/${props.id}`,
+            'DELETE', 
+            null,
+             {
+                Authorization: 'Bearer ' + auth.token
+
+             } 
+        );
+        props.onDelete(props.id);
+    }catch(err){
+
+        }
     }
 
     return (
         <React.Fragment>
+            <ErrorModal error = {error} onclear={clearError} />
             <Modal 
             show={showMap} 
             onCancel={closeMapHandler} 
@@ -54,7 +71,7 @@ const PlaceItem= props => {
                         src={'https://maps.google.com/maps?q=' + props.coordinates.lat.toString() + ',' + props.coordinates.lng.toString() + '&t=&z=15&ie=UTF8&iwloc=&output=embed'}></iframe>
                     <script type='text/javascript' src='https://embedmaps.com/google-maps-authorization/script.js?id=5a33be79e53caf0a07dfec499abf84b7b481f165'></script>
 
-</div>
+           </div>
 
 
             </Modal>
@@ -76,9 +93,11 @@ const PlaceItem= props => {
   </Modal>
 
     <li className="place-item">
+        
         <Cardd className="place-item__content">
+        {isLoading && <LoadingSpinner asOverlay/>}
         <div className="place-item__image">
-            <img src={props.image} alt={props.title} />
+            <img src={`http://localhost:5000/${props.image}`} alt={props.title} />
         </div>
         <div className="place-item__info">
             <h2>{props.title}</h2>
@@ -86,10 +105,16 @@ const PlaceItem= props => {
             <p>{props.description}</p>
         </div>
         <div className="place-item__actions">
-            <Button inverse onClick={openMapHandler}>VIEW ON MAP</Button>
+            <Button inverse onClick={openMapHandler}>
+                VIEW ON MAP
+                </Button>
 
-            {auth.isLoggedIn && (<Button to={`/places/${props.id}`}>EDIT</Button>)}; 
-            {auth.isLoggedIn && (<Button danger onClick={showDeleteWarningHandler}>DELETE</Button> )};
+            {auth.userId === props.creatorId && (
+                <Button to={`/places/${props.id}`}>EDIT</Button>
+                )} 
+            {auth.userId === props.creatorId && (
+                <Button danger onClick={showDeleteWarningHandler}>DELETE</Button>
+                 )}
         </div>
         </Cardd>
     </li>
